@@ -86,8 +86,10 @@ Cekura is the evaluation and learning signal for the whole loop.
   never bleed across agents.
 - **What we were testing:** whether the agent handles adversarial visitors with a concrete,
   grounded response instead of vague claims — and, when it can't, whether the loop teaches it to.
-- **How much we improved performance:** ‹pending the demo run — the scoreboard reports pass/fail
-  and pass-rate per strategy version (v0 → vN); drop in the demo's headline before→after here›.
+- **How much we improved performance:** in our run, the `skeptic` scenario went from **0% (RED)
+  to 100% (GREEN)** — same agent, same scenario — after the loop mined the fix and pushed it to
+  the live prompt. Judged by Nemotron (`nvidia/nemotron-3-super`); scenario synced to Cekura
+  (#273996).
 
 ### NVIDIA Nemotron — the open-weights model that runs the learning
 Nemotron (`nemotron-3-super`, served over an OpenAI-compatible vLLM endpoint) does three jobs:

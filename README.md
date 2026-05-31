@@ -56,7 +56,7 @@ The line that matters: **no human touched the agent between the red and the gree
 
 ## 2. Demo (under 60 seconds)
 
-▶️ **‹video link — to be recorded, ≤60s›**
+▶️ **[Watch the demo (under 60s)](https://youtu.be/yNCp5Sq9WYc)**
 
 Storyboard (what the clip shows, no narration needed):
 1. The Self-Improve scoreboard for an agent — a scenario sitting at **RED**, strategy **v0**.

@@ -17,41 +17,40 @@ sub-second latency). Instead of digging through a brochure, a visitor just asks 
 answers in a natural voice and *acts* on the page while it talks.
 
 What it does on a live site:
-- **Knows the product.** A RAG pipeline scrapes the customer's own website, chunks and embeds it,
-  so the agent answers real product, pricing, and feature questions from the actual site — and
-  can pull in a new page on demand or web-search for facts that live off-site.
+- **Knows the product.** A site-crawling RAG knowledge base means the agent answers real product,
+  pricing, and feature questions from the customer's own content — and can pull in a new page on
+  demand or web-search for facts that live off-site.
 - **Drives the page with you.** While it speaks it scrolls to the right section, highlights the
   CTA, expands content, fills forms, and navigates — a guided tour, not a chat box in the corner.
-- **Remembers every visitor.** Cross-session memory (name, company, interests, history, visit
-  count) so a returning visitor is picked up in context, not greeted from scratch.
-- **Captures and qualifies leads** naturally in the conversation (voice-first, no pushy popups),
-  and **books meetings** (Cal.com).
+- **Remembers every visitor.** Cross-session memory (name, company, interests, history) so a
+  returning visitor is picked up in context.
+- **Captures and qualifies leads** naturally in conversation (voice-first, no pushy popups), and
+  **books meetings** (Cal.com).
 - **Speaks 30+ languages**, switching mid-conversation, and adapts its tone using buyer psychology.
 - **One embed, zero setup** — works on Webflow, Wix, Shopify, or a custom site.
 
 In Foyer's own words: *"Your website is a brochure. Foyer makes it a conversation."* It's a real,
 deployed product — the thing we improve, not the thing we built this weekend.
 
-### The problem we attacked at the hackathon
+### What we built at the hackathon
 
-Voice agents **fail silently.** A visitor asks something, the agent gives a vague non-answer or
-doesn't know a fact, the lead cools — and nobody ever knows or fixes it. So we built a
-**self-improvement layer** that turns every real conversation into training signal:
+A **self-improvement layer** on top of the live agent: the agent is tested by Cekura against real
+visitor scenarios, and when it fails to handle one — say, a skeptical visitor it can't convince —
+the system **automatically mines the failure into a fix and pushes it into the agent's live
+prompt**, so it handles that situation better next time, with **no human editing it. The agent
+teaches itself from its own failures.**
 
-1. After an ElevenLabs call, the transcript is **scored** against the objection it raised
-   (differentiation, price, trust, …) — by **Cekura**, or a **Nemotron** local-judge.
+How the loop runs:
+1. After an ElevenLabs call (or a Cekura scenario run), the transcript is **scored** against the
+   objection it raised — by **Cekura**, or a **Nemotron** local-judge.
 2. If the agent whiffed it → **RED**.
-3. **Nemotron mines the failure into a concrete fix** and decides where it belongs:
-   - **`skill`** — *how to handle* (appended to the agent's skill doc), or
-   - **`brand`** — *a missing/incorrect fact* (appended to the agent's brand-facts).
-4. The fix is written straight back into the agent's **real prompt surfaces**, and the
-   strategy version is bumped. **No human edits it.**
-5. The same scenario re-scores **GREEN**. A scoreboard shows the strategy version climbing,
-   per agent.
+3. **Nemotron mines the failure into a concrete corrective instruction** and decides where it
+   belongs: **`skill`** (how to handle) or **`brand`** (a missing/incorrect fact).
+4. The fix is pushed straight into the agent's **live system prompt**, and the strategy version is
+   bumped. **No human edits it.**
+5. The same scenario re-scores **GREEN**. A scoreboard shows the strategy version climbing.
 
-So Foyer learns **two ways at once**: better *behavior* (skill) and filled *knowledge gaps*
-(brand). The line that matters: **no human touched the agent between the red and the green —
-it fixed itself.**
+The line that matters: **no human touched the agent between the red and the green — it fixed itself.**
 
 ---
 
@@ -62,7 +61,7 @@ it fixed itself.**
 Storyboard (what the clip shows, no narration needed):
 1. The Self-Improve scoreboard for an agent — a scenario sitting at **RED**, strategy **v0**.
 2. Hit **Run** → Cekura/Nemotron scores the live agent → it fails the objection (vague answer).
-3. The loop **auto-mines the fix** and writes it into the agent's prompt (skill/brand).
+3. The loop **auto-mines the fix** and writes it into the agent's live prompt (skill/brand).
 4. Re-run → same scenario flips **GREEN**, strategy **v1**, the mined fix shown in plain English.
    No human edited the agent in between.
 
@@ -70,99 +69,125 @@ Storyboard (what the clip shows, no narration needed):
 
 ## 3. How we used Cekura, Nemotron, and Pipecat
 
-### Cekura — the grader / validation signal
-- Scenarios are `{ persona, expectedOutcome }` and **auto-sync to Cekura** — the integration
-  captures the Cekura scenario id for you (no hunting for it in the dashboard).
-- With `CEKURA_RUN_MODE=elevenlabs`, **Cekura calls the live ElevenLabs agent**, plays the
-  visitor over a real voice call, and scores the conversation against our `expectedOutcome`.
-  (It also scores already-stored real transcripts via `scenarios_run_text`.)
-- Each Foyer agent is bound to its **own** Cekura agent — multi-tenant isolation, so scores
-  never bleed across agents.
-- **What we were testing:** objection handling — `differentiation`, `price`, `trust` (plus
-  `skeptic`, `comparison`, `escalate`, `combined`). Every scenario's pass bar is the same
-  shape: **a concrete, grounded answer — a specific differentiator, a real value lever, a
-  named trust signal — not vague superiority.** Generic "we're the best / it's worth it" = FAIL.
-- **How much it improved performance:** scenarios that score **RED** are re-scored after the
-  autonomous fix and flip **GREEN** at the next strategy version — same agent, same scenario,
-  no human edit. The scoreboard tracks pass/fail count, pass rate, and strategy version per
-  agent so the lift is measured, not asserted. ‹drop in your final run's headline number, e.g.
-  "pass rate v0 → v1: 1/3 → 3/3" — pull it from the scoreboard after your last run›.
+The three hackathon themes map cleanly onto our three pieces: **voice** (the ElevenLabs agent),
+**open-weights models** (Nemotron runs the learning), and **evaluating + improving agent
+performance** (the Cekura loop).
 
-### NVIDIA Nemotron — the judge and the miner
-- Nemotron (`nvidia/nemotron-3-super`, OpenAI-compatible endpoint) does both LLM jobs in the
-  loop: the **local-judge** (scores a transcript pass/fail when Cekura isn't in the loop) and
-  the **miner** (reads the failed transcript and writes the corrected handling, *and* decides
-  whether it's a `skill` or a `brand` fix).
-- It runs behind a provider-agnostic shim; `llmLabel()` reports which model produced each
-  verdict so results are never mislabeled, with an OpenAI/OpenRouter fallback so the loop
-  always runs.
+### Cekura — evaluating and improving the agent (the core theme)
+Cekura is the evaluation and learning signal for the whole loop.
+- **Define once, test forever.** Scenarios — adversarial website visitors: a **GEO skeptic**, a
+  **comparison shopper**, someone with **an ask the agent must escalate rather than bluff** — are
+  authored per-agent in Foyer's Self-Improve dashboard and **synced to Cekura over its MCP
+  server**, which auto-captures the Cekura scenario IDs and binds them to that agent. No hunting
+  for IDs in a dashboard.
+- **Grades the real agent.** With `CEKURA_RUN_MODE=elevenlabs`, Cekura calls the live ElevenLabs
+  agent, plays the visitor over a real voice call, and scores the conversation against our pass
+  criterion. Each Foyer agent is bound to its own Cekura agent (multi-tenant isolation), so scores
+  never bleed across agents.
+- **What we were testing:** whether the agent handles adversarial visitors with a concrete,
+  grounded response instead of vague claims — and, when it can't, whether the loop teaches it to.
+- **How much we improved performance:** ‹pending the demo run — the scoreboard reports pass/fail
+  and pass-rate per strategy version (v0 → vN); drop in the demo's headline before→after here›.
+
+### NVIDIA Nemotron — the open-weights model that runs the learning
+Nemotron (`nemotron-3-super`, served over an OpenAI-compatible vLLM endpoint) does three jobs:
+- **Judge** — scores a transcript pass/fail with a one-line rationale (strict: fails vague/fluffy,
+  passes concrete).
+- **Miner** — reads the failed transcript and writes a tight, on-voice corrective fix that names
+  the actual lever/fact, and decides whether it's a `skill` or `brand` fix.
+- **Simulator** — drives the simulated visitor for the local-judge path.
+
+It dropped straight in as all three (no SDK changes), with an OpenAI/OpenRouter fallback so the
+loop always runs.
 
 ### Pipecat / voice
-- The live agent runs on **ElevenLabs WebRTC** (Foyer's voice stack) — that's the agent Cekura
-  calls and grades, and the prompt surface the mined fixes are written back into.
-- The improvement loop itself was **prototyped on a Pipecat + Twilio reference bot**
-  (our `lasso-voice` repo) and then ported into the ElevenLabs integration. We did not run
-  Pipecat in the final demo — the hackathon notes it's fine not to use all three.
+The live voice runtime is **ElevenLabs WebRTC** — the agent Cekura calls and grades, and the
+prompt surface the fixes are written back into. The improvement loop's design traces to our
+**Pipecat** reference agent (lasso-voice), where we prototyped the score→mine→re-score pattern
+before wiring it into Foyer.
 
 ---
 
 ## 4. What we built during the hackathon
 
-**New — the entire self-improvement layer (built here):**
-- `packages/server/src/improve/` — `loop.ts` (score → mine+apply → re-score), `evaluator.ts`
-  (Cekura + Nemotron judge), `miner.ts` (writes the fix, picks skill vs brand), `store.ts`,
-  `cekura-mcp.ts`, `cekura-sync.ts`, `learned-context.ts`, `scenario-store.ts`.
-- `packages/server/src/routes/improve.ts` — `/api/improve` (scoreboard, run, run-all, seed,
-  scenarios, cekura-binding, diag).
-- `packages/dashboard/src/pages/SelfImprove.tsx` — the per-agent scoreboard + scenario console.
-- A judge-facing presentation scoreboard (RED→GREEN hero + per-scenario "learned fix in plain
-  English" arc).
-- **Writing mined fixes back into the live agent's skill docs / brand-facts** to close the
-  loop on every real conversation.
+**Old (already existed) — Foyer itself:** the agent, the **ElevenLabs voice runtime**, the
+dashboard, and the **site-crawling knowledge base** (RAG). Foyer is the product.
 
-**Pre-existing — Foyer the product:** the voice agent itself (ElevenLabs WebRTC, RAG over the
-customer's website, the dashboard, widget, Shopify, Redis). Foyer existed before — it's the
-*patient* the engine improves, not what we built today.
+**New (built today) — the self-improvement loop:**
+- **Cekura evaluation wired into Foyer** — Cekura runs scenarios against the live agent and scores
+  how it handles them (Nemotron + Cekura stack).
+- **A failure→fix loop** — when the agent fails a scenario, the system mines the failed transcript
+  into a concrete corrective instruction and **pushes it into the agent's live system prompt**, so
+  the next conversation is better — autonomously.
+- **A per-agent scenario UI** — define a visitor scenario (persona + pass bar) per agent in the
+  Self-Improve dashboard; it syncs to Cekura and runs on demand.
+- Under the hood: `packages/server/src/improve/` (loop, evaluator, miner, store, cekura-mcp,
+  cekura-sync, scenario-store), the `/api/improve` routes, the `SelfImprove.tsx` dashboard page,
+  and a judge-facing presentation scoreboard.
 
-**Borrowed:** the loop design was ported from our Pipecat reference bot (`lasso-voice`);
-Cekura, Nemotron, and ElevenLabs are the tools.
+**Borrowed:** the loop design was ported from our Pipecat reference bot (lasso-voice); Cekura,
+Nemotron, and ElevenLabs are the tools.
 
 ---
 
 ## 5. Feedback on the tools
 
-### Cekura — building a self-improvement loop (real friction we hit, and what worked)
-- **Runs are async with no obvious "done" signal.** We had to poll `runs_bulk_retrieve` until a
-  terminal state; our first version assumed a synchronous result and got empty/partial data. A
-  documented terminal-status field (or a webhook) would help a lot.
-- **SSE responses were multi-line and got truncated.** The streamed result arrived as several
-  `data:` frames that had to be concatenated before parsing — otherwise the JSON was cut off
-  mid-object. This cost real time to diagnose.
-- **Double-encoded JSON.** Some results came back as a JSON *string* nested inside JSON and
-  needed a second parse.
-- **Errors were swallowed.** When a run fell back or failed, the cause wasn't surfaced — we had
-  to build a `/diag` endpoint just to see the real error and the raw `runs_bulk_retrieve` shape.
-  Surfacing the underlying error by default would save hours.
-- **What worked well:** the persona + expected-outcome model maps cleanly onto a pass/fail eval,
-  and "Cekura calls the live agent and grades it" is exactly the right primitive for evaluating
-  a real voice agent — it's what made our red→green honest instead of self-graded.
+### NVIDIA Nemotron (`nemotron-3-super`)
 
-### NVIDIA Nemotron
-- **Good at:** following structured judge/miner instructions and returning usable JSON verdicts;
-  fast enough to keep the score→mine→re-score loop tight; OpenAI-compatible so dropping it in was
-  a base-url + model swap; open weights meant no rate-limit anxiety while iterating.
-- **Could be better:** strictness of JSON-only output on long transcripts (we defended with a
-  tolerant parser), and pass/fail calibration could be sharper vs. a frontier judge — a borderline
-  "concrete enough?" answer sometimes scored inconsistently between runs.
+**Did well**
+- **Excellent strict judge** — reliably failed vague/fluffy answers, passed concrete ones, with a
+  useful one-line rationale. Consistent enough to drive an automated pass/fail loop.
+- **Strong miner** — wrote tight, concrete, on-voice fixes that named the actual lever/fact, not
+  generic "be more helpful" filler.
+- **Zero-friction integration** — the OpenAI-compatible vLLM endpoint dropped straight in as
+  judge + miner + simulator with no SDK changes.
+
+**Could be better**
+- **Over-performs as a role-play simulator** — it gave the simulated agent discounts/levers its
+  prompt never granted, producing false passes until we explicitly constrained it to "only use
+  what's in the prompt." Worth a note for anyone using it to simulate conversations.
+- **JSON mode is a sharp edge** — `response_format: json_object` plus a prompt asking for prose
+  silently returns empty/garbage. The format and the prompt have to agree or you get nothing, with
+  no error.
+- Needs tight `max_tokens` + "output only X" guardrails to stay on format.
+
+### Cekura — self-improvement loops + bugs
+
+**Bugs / friction we hit**
+- **SSE response framing (biggest one)** — MCP responses came back as multi-line / concatenated
+  `data:` SSE frames, plus a trailing call-id line after the JSON. Naive parsing truncated or
+  failed; we had to parse each event separately and strip the trailing line. Easy to get wrong —
+  worth documenting or fixing server-side.
+- **Async runs aren't obvious** — `scenarios_run_*` returns run IDs and you must poll
+  `runs_bulk_retrieve` until terminal. A documented "wait-until-terminal" pattern (or a sync
+  option) would save a lot of time.
+- **`text_only` override rejected on voice agents** — running against a live ElevenLabs agent
+  fails with "Override for field text_only is not allowed by config." You have to whitelist it on
+  the ElevenLabs side, and the error doesn't say where.
+- **Empty 0-turn conversations reach a terminal status** — they look like a result but no
+  conversation happened; we had to treat them as "pending," not a failure. Surfacing *why* a run
+  produced 0 turns would help.
+- **Live fan-out floods easily** — one run with N scenarios × M personalities = N×M real
+  ElevenLabs calls. We had to cap it; a built-in cap/warning would help.
+- **Result-shape discovery** — we built a diag endpoint to dump `runs_bulk_retrieve` and
+  reverse-engineer the real result shape. Clearer schema docs would help.
+- **Closing the loop** — after a mined fix, re-scoring races the live prompt propagation to
+  ElevenLabs (debounced). A "the agent under test just changed — re-evaluate now" hook would make
+  self-improvement loops much cleaner.
+
+**Positives**
+- The MCP server was clean to integrate (initialize → session id → tools/call).
+- Per-agent scenario sync + auto-binding the scenario IDs worked great once wired.
+- Once you poll correctly, real grading + the real conversation transcript come back — exactly
+  what a learning loop needs.
 
 ---
 
 ## 6. Live link
 
 **https://app.tryfoyer.ai** — Foyer is deployed (Railway). The Self-Improve scoreboard lives in
-the dashboard per agent (behind login). ‹add a shareable/demo agent link if you want judges to
-click through›.
+the dashboard per agent (behind login).
 
 ---
 
-*Team: Sohazur, Shanzila, Maryam · Built at the YC Voice Agents Hackathon (Cekura × Pipecat/Daily).*
+*Team: Sohazur, Shanzila, Maryam · Built at the YC Voice Agents Hackathon (Cekura × Pipecat / Daily).*
